@@ -7,7 +7,7 @@ Galaxy Trucker is a board game where players build a space ship, and then race t
 
  A Tile object has a 4-tuple of connectors (corresponding to the cardinal directions), which are encoded by the numbers 0,1,2,3 (0 means no connector on that side, 1 is the single connector, 2 the double, 3 the universal).  
 
-The idea being that you can make “super” classes that inherit from Tile, but are more specific.  So I made a ShieldTile class, which is a Tile object (it has connectors), but it also has a shield orientation.  And a CrewTile class, which has some number of crew.
+The idea being that you can make subclasses that inherit from Tile, but are more specific.  So I made a ShieldTile class, which is a Tile object (it has connectors), but it also has a shield orientation.  And a CrewTile class, which has some number of crew.
 
 A Tile object also has a method called rotate, which rotates its connectors (and its shield, if it’s a ShieldTile.  Cannons and engines will do the same thing, but I haven’t written those yet).
 
