@@ -5,9 +5,10 @@ class Tile(object):
     represent connections.  Connections should be given as
     [north, south, east, west], with values ranging from 0-4,
     which represent the different possible connections (0 being none)."""
-    def __init__(self, connectors):
+    def __init__(self, connectors, image = None):
         self.connectors = connectors
         self.ship = None
+        self.image = image  #Should we include this in the tile class?
 
     # rotate clockwise
     def rotate_connectors(self, n):
@@ -110,14 +111,54 @@ if __name__ == '__main__':
     
     ship = Ship(spaces)
 
-    tile1 = Tile([0,1,2,3])
-    tile2 = Tile([3,0,0,0])
-    tile3 = Tile([1,2,0,0])
-    tile4 = Tile([0,0,0,1])
+    ship.tiles[(0,0)].image = "images/tile_61.jpg"
+    tile1 = Tile([0,2,0,2], "images/tile_54.jpg")
+    tile2 = Tile([2,1,0,3], "images/tile_47.jpg")
+    tile3 = Tile([1,0,0,2], "images/tile_26.jpg")
+    tile4 = Tile([0,0,0,3], "images/tile_137.jpg")
     
-    ship.tiles[(0,0)] = tile1
+    ship.tiles[(0,1)] = tile1
     ship.tiles[(0,-1)] = tile2
     ship.tiles[(-1,0)] = tile3
     ship.tiles[(1,0)] = tile4
-    ship.prune()
+    # ship.prune()
     print ship.tiles
+
+
+    #example to draw a ship with the above tiles, then prune it for the tiles to disappear
+
+    import pyglet
+    from pyglet.window import key
+
+    window = pyglet.window.Window()
+    # image0 = pyglet.resource.image("images/tile_61.jpg")
+    # image1 = pyglet.resource.image("images/tile_54.jpg")
+    # image2 = pyglet.resource.image("images/tile_47.jpg")
+    # image3 = pyglet.resource.image("images/tile_26.jpg")
+    # image4 = pyglet.resource.image("images/tile_137.jpg")
+    images = {}
+    for (x,y) in ship.tiles.keys():
+        if ship.tiles[(x,y)]:
+            images[(x,y)] = pyglet.resource.image(ship.tiles[(x,y)].image)
+
+
+    @window.event
+    def on_draw():
+        window.clear()
+        # image0.blit(300, 250)
+        # image1.blit(300, 300)
+        # image2.blit(300,200)
+        # image3.blit(250,250)
+        # image4.blit(350,250)
+        for (x,y) in ship.tiles.keys():
+            if ship.tiles[(x,y)]:
+                images[(x,y)].blit(300+50*x,250+50*y)
+
+
+    @window.event
+    def on_key_press(symbol, modifiers):
+        if symbol == key.P:
+            ship.prune()
+            on_draw()
+
+    pyglet.app.run()
