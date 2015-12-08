@@ -8,7 +8,8 @@ class Tile(object):
     def __init__(self, connectors, image = None):
         self.connectors = connectors
         self.ship = None
-        self.image = image  #Should we include this in the tile class?
+        self.image = image  # Should we include this in the tile class?
+        self.rotation = 0 # Keeps track of rotation for graphical sprite rotation
 
     # rotate clockwise
     def rotate_connectors(self, n):
@@ -17,6 +18,7 @@ class Tile(object):
 
     def rotate(self,n):
         self.rotate_connectors(n)
+        self.rotation+=n
         return self
 
 
@@ -29,7 +31,7 @@ class ShieldTile(Tile):
         self.orientation = orientation
         
     def rotate(self, n):
-        self.rotate_connectors(n)
+        super(ShieldTile, self).rotate(n)
         directions = "NESWN"
         ind = directions.find(self.orientation)
         self.orientation = directions[ind+(n%4):ind+(n%4)+2]
@@ -113,23 +115,25 @@ if __name__ == '__main__':
     ship = Ship(spaces)
 
     # instantiate tiles with images that match the connectors given
-    ship.tiles[(0,0)].image = "images/tile_61.jpg"
+    ship.tiles[(0,0)].image = "images/tile_61.jpg" # crew pod already there
     tile1 = Tile([0,2,0,2], "images/tile_54.jpg")
     tile2 = Tile([2,1,0,3], "images/tile_47.jpg")
     tile3 = Tile([1,0,0,2], "images/tile_26.jpg")
     tile4 = Tile([0,0,0,3], "images/tile_137.jpg")
     
+    # test rotation of sprites with graphics and pruning
+    tile3.rotate(2)
+
     # add the tiles to the ship around the center crew chamber
     ship.tiles[(0,1)] = tile1
     ship.tiles[(0,-1)] = tile2
     ship.tiles[(-1,0)] = tile3
     ship.tiles[(1,0)] = tile4
 
-    print ship.tiles
 
-
-    #example to draw a ship with the above tiles, 
-    # then prune it for the tiles to disappear.
+    # what follows is an example to draw a ship 
+    # with the above tiles, then by pressing 'P' 
+    # prune it for the tiles to disappear.
 
     import pyglet
     from pyglet.window import key
@@ -138,23 +142,34 @@ if __name__ == '__main__':
     # a python GUI module
     window = pyglet.window.Window()
     
-    # add the images to pyglet as resources
-    images = {}
-    for (x,y) in ship.tiles.keys():
-        if ship.tiles[(x,y)]:
-            images[(x,y)] = pyglet.resource.image(ship.tiles[(x,y)].image)
-
-
-    # draw the tiles that are in the ship on the window.
-    # image.blit(x,y) is how images are added to the window.
+    # add the images to pyglet as resources, then as sprites.
+    # we batch the sprites together so that they can be drawn together.
     # images are approx 50px square (51x48), and the center 
     # of the window is (300, 250), measured from the bottom left.
+    # here we normalize the sprites to be 50px by 50px, and set the 
+    # rotation anchor in the center.  Then we rotate the sprite accordingly.
+    images = {}
+    tile_sprites = {}
+    batch = pyglet.graphics.Batch()
+    for (x,y) in ship.tiles.keys():
+        if ship.tiles[(x,y)]:
+            img = pyglet.resource.image(ship.tiles[(x,y)].image)
+            sprite = pyglet.sprite.Sprite(img, 300+50*x, 250+50*y, batch=batch)
+
+            sprite.image.height = 50 # normalize 
+            sprite.image.width = 50
+            sprite.image.anchor_x = 25
+            sprite.image.anchor_y = 25
+            sprite.rotation = 90*ship.tiles[(x,y)].rotation
+
+            tile_sprites[(x,y)] = sprite
+            
+
     @window.event
     def on_draw():
         window.clear()
-        for (x,y) in ship.tiles.keys():
-            if ship.tiles[(x,y)]:
-                images[(x,y)].blit(300+50*x,250+50*y)
+        batch.draw()
+
 
     # when "P" is pressed on the keyboard, ship.prune is called.
     # The window is then redrawn with whatever tiles remain.
@@ -162,6 +177,10 @@ if __name__ == '__main__':
     def on_key_press(symbol, modifiers):
         if symbol == key.P:
             ship.prune()
+            for (x,y) in ship.tiles.keys():
+                if not ship.tiles[(x,y)]:
+                    tile_sprites[(x,y)].visible = False
             on_draw()
+
 
     pyglet.app.run()
