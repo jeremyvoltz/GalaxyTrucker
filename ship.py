@@ -3,12 +3,13 @@ class Tile(object):
     """A tile from the game. it occupies a space.  
     It can belong to a ship.  It takes a list of length 4 to 
     represent connections.  Connections should be given as
-    [north, south, east, west], with values ranging from 0-4,
+    [north, east, south, west], with values ranging from 0-3,
     which represent the different possible connections (0 being none)."""
-    def __init__(self, connectors, image = None):
+    def __init__(self, connectors, id = None):
+        self.type = "connector"
         self.connectors = connectors
         self.ship = None
-        self.image = image  # Should we include this in the tile class?
+        self.id = id # figure out images later
         self.rotation = 0 # Keeps track of rotation for graphical sprite rotation
 
     # rotate clockwise
@@ -71,6 +72,8 @@ class Ship(object):
                     if legal_connection(v,self.tiles[v],p,self.tiles[p]):
                         connected.append(p)
                         next.append(p)
+                    else: 
+                        self.tiles[p] = None
             next.remove(v)
 
 
@@ -98,6 +101,8 @@ def legal_connection(p1, tile1, p2, tile2):
     tile2_side = (tile1_side+2)%4
     tile1_connector = tile1.connectors[tile1_side]
     tile2_connector = tile2.connectors[tile2_side]
+    if tile1_connector == 0 and tile2_connector == 0:
+        return True
     if tile1_connector == 0 or tile2_connector == 0:
         return False
     if tile1_connector == 3 or tile2_connector == 3:
@@ -109,27 +114,29 @@ def legal_connection(p1, tile1, p2, tile2):
 if __name__ == '__main__':
 
     # example to instantiate a ship with some tiles, then prune the ship
-    points = [(0,0),(0,1),(1,0),(0,-1),(-1,0)]
+    points = [(0,0),(0,1),(1,0),(0,-1),(-1,0), (-1,-1)]
     spaces = dict([(p,None) for p in points])
     
     ship = Ship(spaces)
 
-    # instantiate tiles with images that match the connectors given
-    ship.tiles[(0,0)].image = "images/tile_61.jpg" # crew pod already there
-    tile1 = Tile([0,2,0,2], "images/tile_54.jpg")
-    tile2 = Tile([2,1,0,3], "images/tile_47.jpg")
-    tile3 = Tile([1,0,0,2], "images/tile_26.jpg")
-    tile4 = Tile([0,0,0,3], "images/tile_137.jpg")
+    # instantiate tiles with images that m atch the connectors given
+    ship.tiles[(0,0)].id = 61 # crew pod already there
+    tile1 = Tile([0,2,0,2], 54)
+    tile2 = Tile([2,1,0,3], 47)
+    tile3 = Tile([1,0,0,2], 26)
+    tile4 = Tile([0,0,0,3], 137)
+    tile5 = Tile([1,2,0,2], '07')
     
     # test rotation of sprites with graphics and pruning
-    tile3.rotate(2)
+    tile3.rotate(1)
+    tile5.rotate(2)
 
     # add the tiles to the ship around the center crew chamber
     ship.tiles[(0,1)] = tile1
     ship.tiles[(0,-1)] = tile2
     ship.tiles[(-1,0)] = tile3
     ship.tiles[(1,0)] = tile4
-
+    ship.tiles[(-1,-1)] = tile5
 
     # what follows is an example to draw a ship 
     # with the above tiles, then by pressing 'P' 
@@ -153,7 +160,7 @@ if __name__ == '__main__':
     batch = pyglet.graphics.Batch()
     for (x,y) in ship.tiles.keys():
         if ship.tiles[(x,y)]:
-            img = pyglet.resource.image(ship.tiles[(x,y)].image)
+            img = pyglet.resource.image("images/tile_"+str(ship.tiles[(x,y)].id)+".jpg")
             sprite = pyglet.sprite.Sprite(img, 300+50*x, 250+50*y, batch=batch)
 
             sprite.image.height = 50 # normalize 
