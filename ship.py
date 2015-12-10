@@ -5,33 +5,31 @@ class Tile(object):
     represent connections.  Connections should be given as
     [north, east, south, west], with values ranging from 0-3,
     which represent the different possible connections (0 being none)."""
-    def __init__(self, connectors, id = None):
-        self.type = "connector"
+    def __init__(self, connectors, art = None):
         self.connectors = connectors
         self.ship = None
-        self.id = id # figure out images later
         self.rotation = 0 # Keeps track of rotation for graphical sprite rotation
+        self.art = art
 
     # rotate clockwise
     def rotate_connectors(self, n):
         self.connectors = self.connectors[-n%4:]+self.connectors[:-n%4]
         return self
 
-    def rotate(self,n):
+    def rotate(self,n=1):
         self.rotate_connectors(n)
         self.rotation+=n
         return self
-
 
 class ShieldTile(Tile):
     """A tile with a shield in the middle.  
     The shield can have one of four possible orientations:
     'NE', 'ES', 'SW', 'WN', indicating cardinal directions of coverage."""
-    def __init__(self, connectors, orientation):
-        super(ShieldTile, self).__init__(connectors)
+    def __init__(self, connectors, orientation, art = None):
+        super(ShieldTile, self).__init__(connectors, art)
         self.orientation = orientation
         
-    def rotate(self, n):
+    def rotate(self, n=1):
         super(ShieldTile, self).rotate(n)
         directions = "NESWN"
         ind = directions.find(self.orientation)
@@ -42,11 +40,30 @@ class ShieldTile(Tile):
 class CrewTile(Tile):
     """A tile with a crew pod in the middle.
     Orientation does not matter."""
-    def __init__(self, connectors):
-        super(CrewTile, self).__init__(connectors)
+    def __init__(self, connectors, art = None):
+        super(CrewTile, self).__init__(connectors, art)
         self.connectors = connectors
         self.crew = 2
 
+
+class CargoTile(Tile):
+    """A tile with 2 or 3 cargo holds for goods."""
+    def __init__(self, connectors, holds, art = None):
+        super(CargoTile, self).__init__(connectors, art)
+        self.holds = holds
+
+
+class EngineTile(Tile):
+       """A tile with an engine.  Engines always face south."""
+       def __init__(self, connectors, art = None):
+           super(EngineTile, self).__init__(connectors, art)     
+              
+
+class LaserTile(Tile):
+    """A tile with a laser.  Lasers always point north."""
+    def __init__(self, connectors, art = None):
+           super(LaserTile, self).__init__(connectors, art)
+        
 
 class Ship(object):
     """A ship, which consists of a dictionary of {space:tile}, 
@@ -67,12 +84,12 @@ class Ship(object):
                 if all([dist(v,p)==1,
                     self.tiles[v],
                     self.tiles[p], 
-                    p not in checked, 
                     p not in connected]):
-                    if legal_connection(v,self.tiles[v],p,self.tiles[p]):
+                    status = legal_connection(v,self.tiles[v],p,self.tiles[p])
+                    if status:
                         connected.append(p)
                         next.append(p)
-                    else: 
+                    if status is False: 
                         self.tiles[p] = None
             next.remove(v)
 
@@ -90,7 +107,7 @@ def dist((a,b), (c,d)):
     return abs(a-c)+abs(b-d)
 
 # checks whether the connection between two tiles at two points p1, and p2 is legal.
-# Returns None if the points are not neighbors of each other.
+# Returns None if the points are not neighbors of each other, or not connected.
 def legal_connection(p1, tile1, p2, tile2):
     if not dist(p1,p2)==1:
         return None
@@ -102,13 +119,12 @@ def legal_connection(p1, tile1, p2, tile2):
     tile1_connector = tile1.connectors[tile1_side]
     tile2_connector = tile2.connectors[tile2_side]
     if tile1_connector == 0 and tile2_connector == 0:
-        return True
+        return None
     if tile1_connector == 0 or tile2_connector == 0:
         return False
     if tile1_connector == 3 or tile2_connector == 3:
         return True
     return tile1_connector == tile2_connector
-
 
 
 if __name__ == '__main__':
@@ -119,24 +135,34 @@ if __name__ == '__main__':
     
     ship = Ship(spaces)
 
+    from main import tiles, centers
+
+
     # instantiate tiles with images that m atch the connectors given
-    ship.tiles[(0,0)].id = 61 # crew pod already there
-    tile1 = Tile([0,2,0,2], 54)
-    tile2 = Tile([2,1,0,3], 47)
-    tile3 = Tile([1,0,0,2], 26)
-    tile4 = Tile([0,0,0,3], 137)
-    tile5 = Tile([1,2,0,2], '07')
+    # ship.tiles[(0,0)].id = 61 # crew pod already there
+    # tile1 = Tile([0,2,0,2], 54)
+    # tile2 = Tile([2,1,0,3], 47)
+    # tile3 = Tile([1,0,0,2], 26)
+    # tile4 = Tile([0,0,0,3], 137)
+    # tile5 = Tile([1,2,0,2], '07')
     
     # test rotation of sprites with graphics and pruning
-    tile3.rotate(1)
-    tile5.rotate(2)
+    # tile3.rotate(1)
+    # tile5.rotate(2)
+
+    import random
 
     # add the tiles to the ship around the center crew chamber
-    ship.tiles[(0,1)] = tile1
-    ship.tiles[(0,-1)] = tile2
-    ship.tiles[(-1,0)] = tile3
-    ship.tiles[(1,0)] = tile4
-    ship.tiles[(-1,-1)] = tile5
+
+    for i in range(-1,2):
+        for j in range(-1,2):
+            ship.tiles[(i,j)] = random.choice(tiles)
+    ship.tiles[(0,0)] = CrewTile([3,3,3,3], centers[0])
+
+    ship.tiles[(-1,-1)].rotate(1)
+
+    print ship.tiles
+
 
     # what follows is an example to draw a ship 
     # with the above tiles, then by pressing 'P' 
@@ -160,7 +186,7 @@ if __name__ == '__main__':
     batch = pyglet.graphics.Batch()
     for (x,y) in ship.tiles.keys():
         if ship.tiles[(x,y)]:
-            img = pyglet.resource.image("images/tile_"+str(ship.tiles[(x,y)].id)+".jpg")
+            img = pyglet.resource.image("images/"+str(ship.tiles[(x,y)].art))
             sprite = pyglet.sprite.Sprite(img, 300+50*x, 250+50*y, batch=batch)
 
             sprite.image.height = 50 # normalize 
