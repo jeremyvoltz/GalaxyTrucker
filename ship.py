@@ -33,7 +33,7 @@ class ShieldTile(Tile):
         super(ShieldTile, self).rotate(n)
         directions = "NESWN"
         ind = directions.find(self.orientation)
-        self.orientation = directions[ind+(n%4):ind+(n%4)+2]
+        self.orientation = directions[(ind+(n%4))%4:(ind+(n%4))%4+2]
         return self
 
 
@@ -63,13 +63,20 @@ class LaserTile(Tile):
     """A tile with a laser.  Lasers always point north."""
     def __init__(self, connectors, art = None):
            super(LaserTile, self).__init__(connectors, art)
+           self.orientation = "N"
         
+    def rotate(self, n=1):
+        super(LaserTile, self).rotate(n)
+        directions = "NESW"
+        ind = directions.find(self.orientation)
+        self.orientation = directions[(ind+(n%4))%4]
+        return self
 
 class Ship(object):
     """A ship, which consists of a dictionary of {space:tile}, 
     and its genetic code, which consists of tile probabilities."""
-    def __init__(self, spaces, dna = None):
-        self.tiles = spaces
+    def __init__(self, dna = None):
+        self.tiles = {}
         self.tiles[(0,0)] = CrewTile([3,3,3,3])
         self.dna = dna
 
@@ -92,11 +99,69 @@ class Ship(object):
                     if status is False: 
                         self.tiles[p] = None
             next.remove(v)
-
-
         for p in self.tiles.keys():
             if p not in connected:
                 self.tiles[p] = None
+
+    # Checks if it's legally possible to place tile at (x,y)
+    def check_placement(self, (x,y), tile):
+        # engines can't be rotated, nor have anything behind them
+        if type(tile) is EngineTile:
+            if tile.rotation != 0:
+                return False
+            if (x,y-1) in self.tiles:
+                if  self.tiles[(x,y-1)]:
+                    return False
+
+        # Can't place a tile infront of a laser
+        if type(tile) is LaserTile:
+            if (x,y+1) in self.tiles:
+                if tile.orientation == "N" and self.tiles[(x,y+1)]:
+                    return False
+            if (x+1, y) in self.tiles:
+                if tile.orientation == "E" and self.tiles[(x+1,y)]:
+                    return False
+            if (x,y-1) in self.tiles:
+                if tile.orientation == "S" and self.tiles[(x,y-1)]:
+                    return False
+            if (x-1,y) in self.tiles:
+                if tile.orientation == "W" and self.tiles[(x-1,y)]:
+                    return False
+
+        # Can't place a tile below an engine
+        if (x,y+1) in self.tiles:
+            if type(self.tiles[(x,y+1)]) is EngineTile:
+                return False
+
+
+        if (x,y-1) in self.tiles:
+            if type(self.tiles[(x,y-1)]) is LaserTile:
+                if self.tiles[(x,y-1)].orientation == "N":
+                    return False
+        if (x,y+1) in self.tiles:
+            if type(self.tiles[(x,y+1)]) is LaserTile:
+                if self.tiles[(x,y+1)].orientation == "S":
+                    return False    
+        if (x-1,y) in self.tiles:
+            if type(self.tiles[(x-1,y)]) is LaserTile:
+                if self.tiles[(x-1,y)].orientation == "E":
+                    return False
+        if (x+1,y) in self.tiles:
+            if type(self.tiles[(x+1,y)]) is LaserTile:
+                if self.tiles[(x+1,y)].orientation == "W":
+                    return False
+
+        connected = False
+        for (i,j) in [(-1,0),(0,-1),(1,0),(0,1)]:
+            if (x+i,y+j) in self.tiles:
+                if self.tiles[(x+i,y+j)]:
+                    status = legal_connection((x,y), tile, 
+                        (x+i,y+j), self.tiles[(x+i,y+j)])
+                    if status is False:
+                        return False
+                    if status is True:
+                        connected = True
+        return connected
 
 
 # The following methods are useful utilities independent of the classes above.
@@ -126,94 +191,3 @@ def legal_connection(p1, tile1, p2, tile2):
         return True
     return tile1_connector == tile2_connector
 
-
-if __name__ == '__main__':
-
-    # example to instantiate a ship with some tiles, then prune the ship
-    points = [(0,0),(0,1),(1,0),(0,-1),(-1,0), (-1,-1)]
-    spaces = dict([(p,None) for p in points])
-    
-    ship = Ship(spaces)
-
-    from main import tiles, centers
-
-
-    # instantiate tiles with images that m atch the connectors given
-    # ship.tiles[(0,0)].id = 61 # crew pod already there
-    # tile1 = Tile([0,2,0,2], 54)
-    # tile2 = Tile([2,1,0,3], 47)
-    # tile3 = Tile([1,0,0,2], 26)
-    # tile4 = Tile([0,0,0,3], 137)
-    # tile5 = Tile([1,2,0,2], '07')
-    
-    # test rotation of sprites with graphics and pruning
-    # tile3.rotate(1)
-    # tile5.rotate(2)
-
-    import random
-
-    # add the tiles to the ship around the center crew chamber
-
-    for i in range(-1,2):
-        for j in range(-1,2):
-            ship.tiles[(i,j)] = random.choice(tiles)
-    ship.tiles[(0,0)] = CrewTile([3,3,3,3], centers[0])
-
-    ship.tiles[(-1,-1)].rotate(1)
-
-    print ship.tiles
-
-
-    # what follows is an example to draw a ship 
-    # with the above tiles, then by pressing 'P' 
-    # prune it for the tiles to disappear.
-
-    import pyglet
-    from pyglet.window import key
-
-    # create a window object with pyglet,
-    # a python GUI module
-    window = pyglet.window.Window()
-    
-    # add the images to pyglet as resources, then as sprites.
-    # we batch the sprites together so that they can be drawn together.
-    # images are approx 50px square (51x48), and the center 
-    # of the window is (300, 250), measured from the bottom left.
-    # here we normalize the sprites to be 50px by 50px, and set the 
-    # rotation anchor in the center.  Then we rotate the sprite accordingly.
-    images = {}
-    tile_sprites = {}
-    batch = pyglet.graphics.Batch()
-    for (x,y) in ship.tiles.keys():
-        if ship.tiles[(x,y)]:
-            img = pyglet.resource.image("images/"+str(ship.tiles[(x,y)].art))
-            sprite = pyglet.sprite.Sprite(img, 300+50*x, 250+50*y, batch=batch)
-
-            sprite.image.height = 50 # normalize 
-            sprite.image.width = 50
-            sprite.image.anchor_x = 25
-            sprite.image.anchor_y = 25
-            sprite.rotation = 90*ship.tiles[(x,y)].rotation
-
-            tile_sprites[(x,y)] = sprite
-            
-
-    @window.event
-    def on_draw():
-        window.clear()
-        batch.draw()
-
-
-    # when "P" is pressed on the keyboard, ship.prune is called.
-    # The window is then redrawn with whatever tiles remain.
-    @window.event
-    def on_key_press(symbol, modifiers):
-        if symbol == key.P:
-            ship.prune()
-            for (x,y) in ship.tiles.keys():
-                if not ship.tiles[(x,y)]:
-                    tile_sprites[(x,y)].visible = False
-            on_draw()
-
-
-    pyglet.app.run()
