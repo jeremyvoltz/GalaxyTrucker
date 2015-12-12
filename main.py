@@ -1,5 +1,6 @@
 from ship import *
 import random
+import operator
 
 centers = ["tile_61.jpg", "tile_62.jpg", 
     "tile_63.jpg", "tile_64.jpg"]
@@ -60,34 +61,105 @@ def weighted_choice(choices):
        upto += w
     assert False, "Shouldn't get here"
 
+# A method to breed two genes into a child gene.
+def breed(gene1, gene2):
+    assert(set(gene1.keys()) == set(gene2.keys()))
+    child = {}
+    for s in gene1.keys():
+        r = random.randint(0,len(gene1[s]))
+        child[s] = gene1[s][:r] + gene2[s][r:]
+    return child
+
+# method to test which ship is the fittest, in this simple case, speed is the test.
+def fitness(ships):
+    speed = {}
+    for ship in ships:
+        speed[ship] = 0
+        for s in ship.tiles:
+            if type(ship.tiles[s]) is EngineTile:
+                speed[ship] += 1
+    # return ship with maximum speed
+    return  list(reversed(sorted(speed.items(), key=operator.itemgetter(1))))
+
+# method which takes a list of ships and builds them according to their dna.
+def build(ships, points):
+    used = [] 
+    for ship in ships:
+        ship.tiles[(0,0)] = CrewTile([3,3,3,3], centers[0])
+        for s in points:
+            legals = []
+            for (t,r),w in ship.dna[s]: # find legal pieces at s
+                if t not in used:
+                    t.rotate(r)
+                    if ship.check_placement(s,t):
+                        legals.append([(t,r),w])
+                    t.rotate(-r)
+            if legals:
+                t,r = weighted_choice(legals) # choose when using weights given by dna
+                t.rotate(r)
+                ship.tiles[s] = t
+                used.append(t) # mark the tile used
+    return ships
+
+# method to simulate games with four ships, fitness test, then breeding
+def game(n):
+    points = [(0,1),(1,0),(0,-1),(-1,0), (-1,-1),(1,1),(1,-1),(-1,1)]
+    ships = [Ship() for j in range(4)]
+    for ship in ships:
+        ship.dna = random_gene(points, tiles)
+    evolved_dna = {}
+
+    for i in range(n):
+        build(ships, points)
+        ranking = fitness(ships)
+        evolved_dna = breed(ranking[0][0].dna, ranking[1][0].dna)
+        random_gene1 = random_gene(points, tiles)
+        random_gene2 = random_gene(points, tiles)
+        random_gene3 = random_gene(points, tiles)
+        ships = [Ship(evolved_dna),
+            Ship(evolved_dna),
+            Ship(random_gene1),
+            Ship(random_gene2)]
+    
+    return evolved_dna
+
 
 if __name__ == '__main__':
 
-    # example to instantiate a ship and build it using a random gene.
-
-    # The order of points matters, as the ship must build from the center out.
+    dna = game(100)
+    ship = Ship(dna)
     points = [(0,1),(1,0),(0,-1),(-1,0), (-1,-1),(1,1),(1,-1),(-1,1)]
-    
-    ship = Ship()
-    ship.dna = random_gene(points, tiles)
+    build([ship], points)
+    back = dna[(0,-1)]
+    for (t,r),w in back:
+        if type(t) is EngineTile:
+            print t.art,r,w
 
-    # can't allow reusing tiles, because calling rotate on a tile
-    # that's already been placed breaks the ship.  Hence the list used.
-    used = [] 
-    ship.tiles[(0,0)] = CrewTile([3,3,3,3], centers[0])
-    for s in points:
-        legals = []
-        for (t,r),w in ship.dna[s]: # find legal pieces at s
-            if t not in used:
-                t.rotate(r)
-                if ship.check_placement(s,t):
-                    legals.append([(t,r),w])
-                t.rotate(-r)
-        if legals:
-            t,r = weighted_choice(legals) # choose when using weights given by dna
-            t.rotate(r)
-            ship.tiles[s] = t
-            used.append(t) # mark the tile used
+    # # example to instantiate a ship and build it using a random gene.
+
+    # # The order of points matters, as the ship must build from the center out.
+    # points = [(0,1),(1,0),(0,-1),(-1,0), (-1,-1),(1,1),(1,-1),(-1,1)]
+    
+    # ship = Ship()
+    # ship.dna = random_gene(points, tiles)
+
+    # # can't allow reusing tiles, because calling rotate on a tile
+    # # that's already been placed breaks the ship.  Hence the list used.
+    # used = [] 
+    # ship.tiles[(0,0)] = CrewTile([3,3,3,3], centers[0])
+    # for s in points:
+    #     legals = []
+    #     for (t,r),w in ship.dna[s]: # find legal pieces at s
+    #         if t not in used:
+    #             t.rotate(r)
+    #             if ship.check_placement(s,t):
+    #                 legals.append([(t,r),w])
+    #             t.rotate(-r)
+    #     if legals:
+    #         t,r = weighted_choice(legals) # choose when using weights given by dna
+    #         t.rotate(r)
+    #         ship.tiles[s] = t
+    #         used.append(t) # mark the tile used
     
     
     # save the ship for debugging purposes
