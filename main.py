@@ -1,6 +1,10 @@
 from ship import *
 import random
 import operator
+import pyglet
+from pyglet.window import key
+import pickle
+
 
 centers = ["tile_61.jpg", "tile_62.jpg", 
     "tile_63.jpg", "tile_64.jpg"]
@@ -37,146 +41,109 @@ tiles = [CrewTile([1,2,0,2], "tile_07.jpg"),
     LaserTile([0,1,2,0], "tile_110.jpg"),
     LaserTile([0,3,0,0], "tile_113.jpg")]
 
-
-def random_gene(spaces, tiles):
-    gene = {}
-    for s in spaces:
-        v = []
-        for t in tiles:
-            for r in range(4):
-                v.append([(t,r),random.random()])
-        gene[s] = v
-    return gene
+# The probability of a tile mutation on each ship in a generation.
+MUTATION_RATE = 1
 
 
-def weighted_choice(choices):
-    if len(choices) == 0:
-        return None
-    total = sum(w for c, w in choices)
-    r = random.uniform(0, total)
-    upto = 0
-    for c, w in choices:
-       if upto + w >= r:
-          return c
-       upto += w
-    assert False, "Shouldn't get here"
+def breed(ship1,ship2):
+    """Given two ships, this method returns a child ship by 
+    selecting tiles randomly between the two ships at each location.
+    The returned ship should be legal, as the prune method is called 
+    before return."""
+    ship = Ship()
+    ship.tiles[(0,0)] = CrewTile([3,3,3,3], centers[0])
+    assert(set(ship1.tiles.keys()) == set(ship2.tiles.keys()))
+    for s in list(set(ship1.tiles.keys())-set([(0,0)])):
+        ship.tiles[s] = None
+        tile = random.choice([ship1.tiles[s], ship2.tiles[s]])
+        if tile:
+            if ship.check_placement(s, tile):
+                ship.tiles[s] = tile
 
-# A method to breed two genes into a child gene.
-def breed(gene1, gene2):
-    assert(set(gene1.keys()) == set(gene2.keys()))
-    child = {}
-    for s in gene1.keys():
-        r = random.randint(0,len(gene1[s]))
-        child[s] = gene1[s][:r] + gene2[s][r:]
-    return child
+    ship.prune()
+    return ship
 
-# method to test which ship is the fittest, in this simple case, speed is the test.
+
 def fitness(ships):
+    """Returns a list of the input ships ranked by their fitness.  
+    This will eventually be decided by their ranking at the end 
+    of a game, but for now, fitness is simply determined by speed.
+    """
     speed = {}
     for ship in ships:
         speed[ship] = 0
         for s in ship.tiles:
             if type(ship.tiles[s]) is EngineTile:
                 speed[ship] += 1
-    # return ship with maximum speed
-    return  list(reversed(sorted(speed.items(), key=operator.itemgetter(1))))
+    # return list of tuples of (ship, speed) sorted by maximum speed
+    ranking = list(reversed(sorted(speed.items(), key=operator.itemgetter(1))))
+    return [ship for ship, speed in ranking]
+
+
+def mutate(ships):
+    """ Given a list of ships, for each ship it selects 
+    a random location and replaces the tile with a 
+    random legal alternative with probability MUTATION_RATE.  
+    It is selecting from all tile spaces available, which 
+    could be far from the center and thus no tile will suffice.
+    """
+    used = []
+    for ship in ships:
+        used + ship.tiles.values()
+    for ship in ships:
+        s = random.choice(list(set(ship.tiles.keys())-set([(0,0)])))
+        if random.random() < MUTATION_RATE:
+            legals = []
+            for t in tiles:
+                if t not in used:
+                    for r in range(3):
+                        t.rotate(r)
+                        if ship.check_placement(s,t):
+                            legals.append((t,r))
+                        t.rotate(-r)
+            if legals:
+                t,r = random.choice(legals)
+                t.rotate(r)
+                ship.tiles[s] = t
+                used.append(t)
+    for ship in ships:
+        ship.prune()
+    return ships
+
 
 # method which takes a list of ships and builds them according to their dna.
 def build(ships, points):
-    used = [] 
+    """Takes a list of ships and a collection of points
+     and gives each a random, legal assortment of tiles."""
+    used = []
     for ship in ships:
         ship.tiles[(0,0)] = CrewTile([3,3,3,3], centers[0])
-        for s in points:
+        for s in list(set(points) - set([(0,0)])):
             legals = []
-            for (t,r),w in ship.dna[s]: # find legal pieces at s
+            for t in tiles: # find legal pieces at s
                 if t not in used:
-                    t.rotate(r)
-                    if ship.check_placement(s,t):
-                        legals.append([(t,r),w])
-                    t.rotate(-r)
+                    for r in range(3):
+                        t.rotate(r)
+                        if ship.check_placement(s,t):
+                            legals.append((t,r))
+                        t.rotate(-r)
             if legals:
-                t,r = weighted_choice(legals) # choose when using weights given by dna
+                t,r = random.choice(legals) # choose when using weights given by dna
                 t.rotate(r)
                 ship.tiles[s] = t
                 used.append(t) # mark the tile used
+            else:
+                ship.tiles[s] = None
     return ships
 
-# method to simulate games with four ships, fitness test, then breeding
-def game(n):
-    points = [(0,1),(1,0),(0,-1),(-1,0), (-1,-1),(1,1),(1,-1),(-1,1)]
-    ships = [Ship() for j in range(4)]
-    for ship in ships:
-        ship.dna = random_gene(points, tiles)
-    evolved_dna = {}
 
-    for i in range(n):
-        build(ships, points)
-        ranking = fitness(ships)
-        evolved_dna = breed(ranking[0][0].dna, ranking[1][0].dna)
-        random_gene1 = random_gene(points, tiles)
-        random_gene2 = random_gene(points, tiles)
-        random_gene3 = random_gene(points, tiles)
-        ships = [Ship(evolved_dna),
-            Ship(evolved_dna),
-            Ship(random_gene1),
-            Ship(random_gene2)]
-    
-    return evolved_dna
-
-
-if __name__ == '__main__':
-
-    dna = game(100)
-    ship = Ship(dna)
-    points = [(0,1),(1,0),(0,-1),(-1,0), (-1,-1),(1,1),(1,-1),(-1,1)]
-    build([ship], points)
-    back = dna[(0,-1)]
-    for (t,r),w in back:
-        if type(t) is EngineTile:
-            print t.art,r,w
-
-    # # example to instantiate a ship and build it using a random gene.
-
-    # # The order of points matters, as the ship must build from the center out.
-    # points = [(0,1),(1,0),(0,-1),(-1,0), (-1,-1),(1,1),(1,-1),(-1,1)]
-    
-    # ship = Ship()
-    # ship.dna = random_gene(points, tiles)
-
-    # # can't allow reusing tiles, because calling rotate on a tile
-    # # that's already been placed breaks the ship.  Hence the list used.
-    # used = [] 
-    # ship.tiles[(0,0)] = CrewTile([3,3,3,3], centers[0])
-    # for s in points:
-    #     legals = []
-    #     for (t,r),w in ship.dna[s]: # find legal pieces at s
-    #         if t not in used:
-    #             t.rotate(r)
-    #             if ship.check_placement(s,t):
-    #                 legals.append([(t,r),w])
-    #             t.rotate(-r)
-    #     if legals:
-    #         t,r = weighted_choice(legals) # choose when using weights given by dna
-    #         t.rotate(r)
-    #         ship.tiles[s] = t
-    #         used.append(t) # mark the tile used
-    
-    
-    # save the ship for debugging purposes
-    import pickle
-    output = open('ship.pkl', 'wb')
-    pickle.dump(ship,output)
-    output.close()
-
-
-
-    # what follows is an example to draw a ship 
-    # with the above tiles, then by pressing 'P' 
-    # prune it for the unconnected tiles to disappear.
-
-    import pyglet
-    from pyglet.window import key
-
+def draw(ship):
+    """This program draws the inputted ship onto a pyglet window object,
+    which is stored in memory.  To see any such windows, one must call 
+    pyglet.app.run() afterwards for the window objects to be displayed.
+    Given a displayed window, pressing 'P' runs ship.prune(), though this 
+    should be unecessary, as ship.prune() is run after mutation and breeding.
+    """
     # create a window object with pyglet,
     # a python GUI module
     window = pyglet.window.Window()
@@ -203,12 +170,10 @@ if __name__ == '__main__':
 
             tile_sprites[(x,y)] = sprite
             
-
     @window.event
     def on_draw():
         window.clear()
         batch.draw()
-
 
     # when "P" is pressed on the keyboard, ship.prune is called.
     # The window is then redrawn with whatever tiles remain.
@@ -222,8 +187,59 @@ if __name__ == '__main__':
             on_draw()
 
 
+def weight(ships):
+    """Given a list of ships, this returns a list of those ships,
+    but with multiple occurences, weighted by their order upon input,
+    so that 'random.choice()' will given weighted choices."""
+    n = len(ships)
+    weight = []
+    for i in range(n):
+        weight += i*[ships[n-(i+1)]]
+    return weight
+
+
+def game(gens, points, num_of_ships = 4):
+    """Simulates games with 'num_of_ships' ships, runs fitness test, 
+    then breeds the resulting ranked ships into pairs using the weight 
+    method, with possible mutation each generation.  It returns the 
+    final list of ships after 'gens' generations.
+    """
+    used = []
+    ships = [Ship() for i in range(num_of_ships)]
+    build(ships, points)
+
+    for i in range(gens):
+        ranking = fitness(ships)
+        weighted = weight(ranking)
+        ships = [breed(random.choice(weighted), random.choice(weighted)) for _ in range(num_of_ships)]
+        mutate(ships)
+    return ships
+
+
+# save the ship for debugging purposes
+def pickle(ship):
+    output = open('ship.pkl', 'wb')
+    pickle.dump(ship,output)
+    output.close()
+
+
+if __name__ == '__main__':
+
+    # Run a simulation using the methods above.
+
+    # Points are created and sorted by distance from the origin.
+    points = []
+    for i in range(-3,4):
+        for j in range(-3,4):
+            points.append((i,j))
+    points = sorted(points, key = lambda x: dist((0,0),x))
+
+    # Run the simulation.
+    ships = game(50,points,100)
+
+    # Display the five most fit ships at the end of the simulation.
+    for ship in ships[:5]:
+        draw(ship)
     pyglet.app.run()
-
-
 
 
